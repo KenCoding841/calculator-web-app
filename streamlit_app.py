@@ -18,6 +18,7 @@ def reset_system():
     st.session_state.val_a = 1.0
     st.session_state.val_b = 1.0
     st.session_state.val_c = 0.0
+    # FIX: Đảm bảo x_range luôn là một tuple để không lỗi subscriptable
     st.session_state.x_range = (-10.0, 10.0)
 
 if 'raw_input' not in st.session_state:
@@ -27,14 +28,11 @@ if 'raw_input' not in st.session_state:
 with st.sidebar:
     st.title("♾️ MathOS Ultra")
     
-    # Nút Reset chuẩn 2026
     if st.button("🔄 Reset Toàn Bộ", width='stretch'):
         reset_system()
         st.rerun()
     
     st.divider()
-    
-    # Lựa chọn chế độ
     app_mode = st.selectbox("Chọn chế độ làm việc:", ["📈 Đồ thị 2D & Giải tích", "🧊 Mô phỏng 3D Surface"])
     
     st.subheader("🕹️ Điều khiển tham số")
@@ -44,8 +42,6 @@ with st.sidebar:
     params = {'a': a, 'b': b, 'c': c}
 
     st.divider()
-    
-    # Ý tưởng mới 1: Thư viện hàm mẫu
     st.subheader("📚 Thư viện nhanh")
     lib = {
         "Mặc định": "a*x**2, sin(b*x + c)",
@@ -71,56 +67,55 @@ if app_mode == "📈 Đồ thị 2D & Giải tích":
         st.subheader("Cài đặt hàm")
         eq_text = st.text_area("Nhập các hàm f(x) (cách nhau bằng dấu phẩy):", key="raw_input").replace("^", "**")
         calc_mode = st.radio("Phân tích:", ["Gốc", "Đạo hàm f'", "Tích phân ∫"])
-        x_lim = st.slider("Phạm vi trục X:", -100.0, 100.0, key="x_range")
+        # FIX: Dòng này cực kỳ quan trọng, giá trị mặc định phải là tuple để st.slider tạo ra 2 đầu kéo
+        x_lim = st.slider("Phạm vi trục X:", -100.0, 100.0, value=st.session_state.x_range, key="x_range")
         show_points = st.toggle("Hiển thị cực trị", value=True)
 
     with col1:
-        eq_list = [e.strip() for e in eq_text.split(",") if e.strip()]
-        x_vals = np.linspace(x_lim[0], x_lim[1], 1000)
-        fig = go.Figure()
-        stats_table = []
+        try:
+            eq_list = [e.strip() for e in eq_text.split(",") if e.strip()]
+            # FIX: x_lim[0] và x_lim[1] bây giờ đã an toàn
+            x_vals = np.linspace(x_lim[0], x_lim[1], 1000)
+            fig = go.Figure()
+            stats_table = []
 
-        for eq in eq_list:
-            try:
-                # Phân tích biểu thức
-                expr = sp.parse_expr(eq).subs(params)
-                if calc_mode == "Đạo hàm f'": expr = sp.diff(expr, x_sym)
-                elif calc_mode == "Tích phân ∫": expr = sp.integrate(expr, x_sym)
-                
-                # Chuyển sang Numpy để vẽ
-                f_np = sp.lambdify(x_sym, expr, "numpy")
-                y_vals = f_np(x_vals)
-                if isinstance(y_vals, (int, float, np.float64)): y_vals = np.full_like(x_vals, y_vals)
-                
-                # Ý tưởng mới 2: Live Stats
-                stats_table.append({
-                    "Hàm số": eq,
-                    "Max Y": np.max(y_vals),
-                    "Min Y": np.min(y_vals),
-                    "Trung bình": np.mean(y_vals)
-                })
+            for eq in eq_list:
+                try:
+                    expr = sp.parse_expr(eq).subs(params)
+                    if calc_mode == "Đạo hàm f'": expr = sp.diff(expr, x_sym)
+                    elif calc_mode == "Tích phân ∫": expr = sp.integrate(expr, x_sym)
+                    
+                    f_np = sp.lambdify(x_sym, expr, "numpy")
+                    y_vals = f_np(x_vals)
+                    if isinstance(y_vals, (int, float, np.float64)): y_vals = np.full_like(x_vals, y_vals)
+                    
+                    stats_table.append({
+                        "Hàm số": eq,
+                        "Max Y": np.max(y_vals),
+                        "Min Y": np.min(y_vals),
+                        "Trung bình": np.mean(y_vals)
+                    })
 
-                # Vẽ đồ thị
-                fig.add_trace(go.Scatter(x=x_vals, y=y_vals, name=f"f(x)={eq}", line=dict(width=3)))
-                
-                # Ý tưởng mới 3: Điểm cực trị động
-                if show_points and calc_mode == "Gốc":
-                    try:
-                        d1 = sp.diff(expr, x_sym)
-                        roots = sp.solve(d1, x_sym)
-                        for r in roots:
-                            if r.is_real and x_lim[0] <= r <= x_lim[1]:
-                                ry = float(expr.subs(x_sym, float(r)))
-                                fig.add_trace(go.Scatter(x=[float(r)], y=[ry], mode='markers', 
-                                                       marker=dict(size=10, color='yellow'), name="Cực trị"))
-                    except: pass
-            except:
-                st.error(f"Lỗi cú pháp tại hàm: {eq}")
+                    fig.add_trace(go.Scatter(x=x_vals, y=y_vals, name=f"f(x)={eq}", line=dict(width=3)))
+                    
+                    if show_points and calc_mode == "Gốc":
+                        try:
+                            d1 = sp.diff(expr, x_sym)
+                            roots = sp.solve(d1, x_sym)
+                            for r in roots:
+                                if r.is_real and x_lim[0] <= r <= x_lim[1]:
+                                    ry = float(expr.subs(x_sym, float(r)))
+                                    fig.add_trace(go.Scatter(x=[float(r)], y=[ry], mode='markers', 
+                                                           marker=dict(size=10, color='yellow'), name="Cực trị"))
+                        except: pass
+                except Exception as inner_e:
+                    st.error(f"Lỗi cú pháp tại hàm '{eq}'")
 
-        fig.update_layout(template="plotly_dark", height=600, margin=dict(l=20, r=20, t=20, b=20))
-        st.plotly_chart(fig, width='stretch')
+            fig.update_layout(template="plotly_dark", height=600, margin=dict(l=20, r=20, t=20, b=20))
+            st.plotly_chart(fig, width='stretch')
+        except Exception as outer_e:
+            st.warning("Vui lòng kiểm tra lại định dạng nhập liệu.")
 
-    # Ý tưởng mới 4: Bảng phân tích & Xuất dữ liệu
     st.divider()
     st.subheader("📊 Bảng phân tích dữ liệu chuyên sâu")
     if stats_table:
@@ -143,13 +138,12 @@ else: # --- CHẾ ĐỘ 3D ---
         Z = f_3d(X, Y)
         
         fig3d = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='Viridis')])
-        fig3d.update_layout(template="plotly_dark", height=700)
+        fig3d.update_layout(template="plotly_dark", height=700, margin=dict(l=0, r=0, t=0, b=0))
         st.plotly_chart(fig3d, width='stretch')
         
-        # Ý tưởng mới 5: Ghi chú giải thích tham số
         st.info(f"💡 Phân tích 3D: Với a={a}, b={b}, c={c}, hình dáng bề mặt thay đổi dựa trên các hệ số co giãn tương ứng.")
     except:
-        st.warning("Đang chờ nhập hàm số 3D hợp lệ...")
+        st.warning("Vui lòng nhập hàm 3D hợp lệ (Ví dụ: sin(x)*cos(y) + a)")
 
 st.markdown("---")
-st.caption("© 2026 MathOS Web Portal | Optimized for High-Performance Computation | This is made by a Vietnamese using an AI to code so uhh enjoy or hate it or whathever :D")
+st.caption("© 2026 MathOS Web Portal | Optimized for High-Performance Computation | Created by an AI-assisted Human 🇻🇳")
