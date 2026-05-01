@@ -4,106 +4,152 @@ import numpy as np
 import sympy as sp
 import pandas as pd
 
-# --- 1. CONFIG & SESSION ---
-st.set_page_config(page_title="Math Web 2026", layout="wide", page_icon="📈")
+# --- 1. KHỞI TẠO CẤU HÌNH & SESSION STATE ---
+st.set_page_config(
+    page_title="MathOS Ultra Web", 
+    layout="wide", 
+    page_icon="🌐"
+)
 
-def reset_all():
+# Hàm Reset (Đưa mọi thứ về trạng thái ban đầu)
+def reset_system():
     st.session_state.raw_input = "a*x**2, sin(b*x + c)"
-    st.session_state.z_input = "sin(a*x) * cos(b*y)"
-    st.session_state.v_a = 2.0
-    st.session_state.v_b = 1.0
-    st.session_state.v_c = 0.0
+    st.session_state.z_input = "exp(-(x**2 + y**2)/a)"
+    st.session_state.val_a = 1.0
+    st.session_state.val_b = 1.0
+    st.session_state.val_c = 0.0
     st.session_state.x_range = (-10.0, 10.0)
 
 if 'raw_input' not in st.session_state:
-    reset_all()
+    reset_system()
 
-# --- 2. SIDEBAR ---
+# --- 2. THANH ĐIỀU HƯỚNG (SIDEBAR) ---
 with st.sidebar:
-    st.header("💎 Control Panel")
-    if st.button("🔄 Reset System", width='stretch'):
-        reset_all()
+    st.title("♾️ MathOS Ultra")
+    
+    # Nút Reset chuẩn 2026
+    if st.button("🔄 Reset Toàn Bộ", width='stretch'):
+        reset_system()
         st.rerun()
     
     st.divider()
-    mode = st.radio("Chế độ:", ["📊 2D & Giải tích", "🧊 3D Surface"])
     
-    st.subheader("🕹️ Biến số động")
-    a = st.slider("Tham số a", -10.0, 10.0, key="v_a")
-    b = st.slider("Tham số b", -10.0, 10.0, key="v_b")
-    c = st.slider("Tham số c", -10.0, 10.0, key="v_c")
+    # Lựa chọn chế độ
+    app_mode = st.selectbox("Chọn chế độ làm việc:", ["📈 Đồ thị 2D & Giải tích", "🧊 Mô phỏng 3D Surface"])
+    
+    st.subheader("🕹️ Điều khiển tham số")
+    a = st.slider("Biến số a:", -10.0, 10.0, key="val_a")
+    b = st.slider("Biến số b:", -10.0, 10.0, key="val_b")
+    c = st.slider("Biến số c:", -10.0, 10.0, key="val_c")
     params = {'a': a, 'b': b, 'c': c}
 
-# --- 3. MAIN INTERFACE ---
-st.title("🚀 Omni Math Engine")
-
-x_s, y_s = sp.symbols('x y')
-
-if mode == "📊 2D & Giải tích":
-    col_main, col_sub = st.columns([3, 1])
+    st.divider()
     
-    with col_sub:
-        st.subheader("Cài đặt")
-        eq_in = st.text_area("Hàm f(x) (cách nhau bằng dấu phẩy):", key="raw_input").replace("^", "**")
-        op = st.radio("Phân tích:", ["Gốc", "Đạo hàm f'", "Tích phân ∫"])
-        xr = st.slider("Phạm vi X:", -100.0, 100.0, key="x_range")
-        show_p = st.toggle("Hiện cực trị", value=True)
+    # Ý tưởng mới 1: Thư viện hàm mẫu
+    st.subheader("📚 Thư viện nhanh")
+    lib = {
+        "Mặc định": "a*x**2, sin(b*x + c)",
+        "Hàm Sigmoid": "1/(1 + exp(-a*x))",
+        "Sóng tắt dần": "exp(-0.1*x) * sin(b*x)",
+        "Bậc 3 phức hợp": "a*x**3 + b*x**2 + c"
+    }
+    selected_lib = st.selectbox("Chọn hàm mẫu:", list(lib.keys()))
+    if st.button("Nạp hàm mẫu", width='stretch'):
+        st.session_state.raw_input = lib[selected_lib]
+        st.rerun()
 
-    with col_main:
-        eq_list = [e.strip() for e in eq_in.split(",") if e.strip()]
-        x_v = np.linspace(xr[0], xr[1], 1000)
+# --- 3. XỬ LÝ LOGIC TOÁN HỌC ---
+x_sym, y_sym = sp.symbols('x y')
+
+# --- 4. GIAO DIỆN CHÍNH ---
+st.title("🚀 Omni Math Engine - Web Portal")
+
+if app_mode == "📈 Đồ thị 2D & Giải tích":
+    col1, col2 = st.columns([3, 1])
+    
+    with col2:
+        st.subheader("Cài đặt hàm")
+        eq_text = st.text_area("Nhập các hàm f(x) (cách nhau bằng dấu phẩy):", key="raw_input").replace("^", "**")
+        calc_mode = st.radio("Phân tích:", ["Gốc", "Đạo hàm f'", "Tích phân ∫"])
+        x_lim = st.slider("Phạm vi trục X:", -100.0, 100.0, key="x_range")
+        show_points = st.toggle("Hiển thị cực trị", value=True)
+
+    with col1:
+        eq_list = [e.strip() for e in eq_text.split(",") if e.strip()]
+        x_vals = np.linspace(x_lim[0], x_lim[1], 1000)
         fig = go.Figure()
-        stats = []
+        stats_table = []
 
         for eq in eq_list:
             try:
+                # Phân tích biểu thức
                 expr = sp.parse_expr(eq).subs(params)
-                if op == "Đạo hàm f'": expr = sp.diff(expr, x_s)
-                elif op == "Tích phân ∫": expr = sp.integrate(expr, x_s)
+                if calc_mode == "Đạo hàm f'": expr = sp.diff(expr, x_sym)
+                elif calc_mode == "Tích phân ∫": expr = sp.integrate(expr, x_sym)
                 
-                f_np = sp.lambdify(x_s, expr, "numpy")
-                y_v = f_np(x_v)
-                if isinstance(y_v, (int, float, np.float64)): y_v = np.full_like(x_v, y_v)
+                # Chuyển sang Numpy để vẽ
+                f_np = sp.lambdify(x_sym, expr, "numpy")
+                y_vals = f_np(x_vals)
+                if isinstance(y_vals, (int, float, np.float64)): y_vals = np.full_like(x_vals, y_vals)
                 
-                fig.add_trace(go.Scatter(x=x_v, y=y_v, name=f"f(x)={eq}", line=dict(width=3)))
-                stats.append({"Hàm": eq, "Max": np.max(y_v), "Min": np.min(y_v)})
+                # Ý tưởng mới 2: Live Stats
+                stats_table.append({
+                    "Hàm số": eq,
+                    "Max Y": np.max(y_vals),
+                    "Min Y": np.min(y_vals),
+                    "Trung bình": np.mean(y_vals)
+                })
 
-                if show_p and op == "Gốc":
+                # Vẽ đồ thị
+                fig.add_trace(go.Scatter(x=x_vals, y=y_vals, name=f"f(x)={eq}", line=dict(width=3)))
+                
+                # Ý tưởng mới 3: Điểm cực trị động
+                if show_points and calc_mode == "Gốc":
                     try:
-                        d1 = sp.diff(expr, x_s)
-                        pts = sp.solve(d1, x_s)
-                        for p in pts:
-                            if p.is_real and xr[0] <= p <= xr[1]:
-                                py = float(expr.subs(x_s, float(p)))
-                                fig.add_trace(go.Scatter(x=[float(p)], y=[py], mode='markers', marker=dict(size=10, color='yellow'), name="Cực trị"))
+                        d1 = sp.diff(expr, x_sym)
+                        roots = sp.solve(d1, x_sym)
+                        for r in roots:
+                            if r.is_real and x_lim[0] <= r <= x_lim[1]:
+                                ry = float(expr.subs(x_sym, float(r)))
+                                fig.add_trace(go.Scatter(x=[float(r)], y=[ry], mode='markers', 
+                                                       marker=dict(size=10, color='yellow'), name="Cực trị"))
                     except: pass
-            except Exception as e:
-                st.error(f"Lỗi hàm {eq}: {e}")
+            except:
+                st.error(f"Lỗi cú pháp tại hàm: {eq}")
 
-        fig.update_layout(template="plotly_dark", height=600, margin=dict(l=10, r=10, t=10, b=10))
+        fig.update_layout(template="plotly_dark", height=600, margin=dict(l=20, r=20, t=20, b=20))
         st.plotly_chart(fig, width='stretch')
 
+    # Ý tưởng mới 4: Bảng phân tích & Xuất dữ liệu
     st.divider()
-    if stats:
-        st.subheader("📊 Bảng thống kê")
-        st.dataframe(pd.DataFrame(stats), width='stretch')
+    st.subheader("📊 Bảng phân tích dữ liệu chuyên sâu")
+    if stats_table:
+        df = pd.DataFrame(stats_table)
+        st.dataframe(df, width='stretch')
+        st.download_button("📥 Tải báo cáo CSV", df.to_csv(index=False), "math_report.csv", width='stretch')
 
-else: # 3D MODE
+else: # --- CHẾ ĐỘ 3D ---
     st.subheader("Mô phỏng bề mặt 3D")
-    z_in = st.text_input("Hàm z = f(x, y):", key="z_input").replace("^", "**")
+    z_in = st.text_input("Nhập hàm z = f(x, y):", key="z_input").replace("^", "**")
     
-    x3 = np.linspace(-10, 10, 50)
-    y3 = np.linspace(-10, 10, 50)
-    X, Y = np.meshgrid(x3, y3)
+    res = 60
+    x_3d = np.linspace(-10, 10, res)
+    y_3d = np.linspace(-10, 10, res)
+    X, Y = np.meshgrid(x_3d, y_3d)
     
     try:
-        e3 = sp.parse_expr(z_in).subs(params)
-        f3 = sp.lambdify((x_s, y_s), e3, "numpy")
-        Z = f3(X, Y)
-        fig3 = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='Viridis')])
-        fig3.update_layout(template="plotly_dark", height=750)
-        st.plotly_chart(fig3, width='stretch')
+        expr_3d = sp.parse_expr(z_in).subs(params)
+        f_3d = sp.lambdify((x_sym, y_sym), expr_3d, "numpy")
+        Z = f_3d(X, Y)
+        
+        fig3d = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='Viridis')])
+        fig3d.update_layout(template="plotly_dark", height=700)
+        st.plotly_chart(fig3d, width='stretch')
+        
+        # Ý tưởng mới 5: Ghi chú giải thích tham số
+        st.info(f"💡 Phân tích 3D: Với a={a}, b={b}, c={c}, hình dáng bề mặt thay đổi dựa trên các hệ số co giãn tương ứng.")
     except:
-        st.info("Nhập hàm số để vẽ 3D (Ví dụ: sin(x)*cos(y) + a)")
+        st.warning("Đang chờ nhập hàm số 3D hợp lệ...")
 
-st.caption("MathOS Cloud 2026 | Engine: SymPy + Plotly | Optimized for stretch display")
+st.markdown("---")
+st.caption("© 2026 MathOS Web Portal | Optimized for High-Performance Computation | This is made by a Vietnamese using an AI to code so uhh enjoy or hate it or whathever :D")
